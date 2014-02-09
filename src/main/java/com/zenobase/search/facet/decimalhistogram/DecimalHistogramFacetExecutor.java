@@ -4,6 +4,8 @@ import java.io.IOException;
 
 import org.apache.lucene.index.AtomicReaderContext;
 import org.elasticsearch.common.hppc.LongLongOpenHashMap;
+import org.elasticsearch.common.hppc.LongObjectMap;
+import org.elasticsearch.common.hppc.LongObjectOpenHashMap;
 import org.elasticsearch.common.recycler.Recycler;
 import org.elasticsearch.index.fielddata.AtomicNumericFieldData;
 import org.elasticsearch.index.fielddata.DoubleValues;
@@ -14,6 +16,9 @@ import org.elasticsearch.search.facet.InternalFacet;
 import org.elasticsearch.search.facet.histogram.HistogramFacet.ComparatorType;
 import org.elasticsearch.search.internal.SearchContext;
 
+import com.zenobase.search.facet.decimalhistogram.InternalDecimalHistogramFacet.DecimalEntry;
+
+
 public class DecimalHistogramFacetExecutor extends FacetExecutor {
 
 	private final IndexNumericFieldData<AtomicNumericFieldData> indexFieldData;
@@ -21,14 +26,14 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 	private final double interval;
 	private final double offset;
 
-	final Recycler.V<LongLongOpenHashMap> counts;
+	final Recycler.V<LongObjectOpenHashMap<InternalDecimalHistogramFacet.DecimalEntry>> counts;
 
 	public DecimalHistogramFacetExecutor(IndexNumericFieldData<AtomicNumericFieldData> indexFieldData, double interval, double offset, ComparatorType comparatorType, SearchContext context) {
 		this.indexFieldData = indexFieldData;
 		this.interval = interval;
 		this.offset = offset;
 		this.comparatorType = comparatorType;
-		this.counts = context.cacheRecycler().longLongMap(-1);
+		this.counts = context.cacheRecycler().longObjectMap(-1);
 	}
 
 	@Override
@@ -41,11 +46,12 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 		InternalDecimalHistogramFacet.DecimalEntry[] entries = new InternalDecimalHistogramFacet.DecimalEntry[counts.v().size()];
 		final boolean[] states = counts.v().allocated;
 		final long[] keys = counts.v().keys;
-		final long[] values = counts.v().values;
+		final DecimalEntry[] values = counts.v().values;
 		int entryIndex = 0;
 		for (int i = 0; i < states.length; ++i) {
 			if (states[i]) {
-				entries[entryIndex++] = new InternalDecimalHistogramFacet.DecimalEntry(keys[i], values[i]);
+				entries[entryIndex++] = new InternalDecimalHistogramFacet.DecimalEntry(keys[i], values[i].getCount(), 
+						values[i].getBinContent(), values[i].getSumOfSquares());
 			}
 		}
 		counts.release();
@@ -81,9 +87,9 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 
 		private final double interval;
 		private final double offset;
-		private final LongLongOpenHashMap counts;
+		private final LongObjectOpenHashMap<DecimalEntry> counts;
 
-		public HistogramProc(double interval, double offset, LongLongOpenHashMap counts) {
+		public HistogramProc(double interval, double offset, LongObjectOpenHashMap<DecimalEntry> counts) {
 			this.interval = interval;
 			this.offset = offset;
 			this.counts = counts;
@@ -92,7 +98,15 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 		@Override
 		public void onValue(int docId, double value) {
 			long bucket = (long) Math.floor(((value + offset) / interval));
-			counts.addTo(bucket, 1);
+            DecimalEntry entry = counts.get(bucket);
+            if (entry == null) {
+                entry = new InternalDecimalHistogramFacet.DecimalEntry(bucket,1,value, value*value);
+                counts.put(bucket, entry);
+            } else {
+                entry.count++;
+                entry.binContent += value;
+                entry.sumOfSquares += value*value;
+            }
 		}
 	}
 }

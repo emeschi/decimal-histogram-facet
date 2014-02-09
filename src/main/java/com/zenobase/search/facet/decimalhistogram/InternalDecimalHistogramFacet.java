@@ -8,9 +8,15 @@ import org.elasticsearch.common.Strings;
 import org.elasticsearch.common.bytes.BytesReference;
 import org.elasticsearch.common.bytes.HashedBytesArray;
 import org.elasticsearch.common.hppc.LongLongOpenHashMap;
+
+import com.carrotsearch.hppc.LongDoubleOpenHashMap;
+
+import org.elasticsearch.common.hppc.LongObjectMap;
+import org.elasticsearch.common.hppc.LongObjectOpenHashMap;
 import org.elasticsearch.common.io.stream.StreamInput;
 import org.elasticsearch.common.io.stream.StreamOutput;
 import org.elasticsearch.common.recycler.Recycler;
+import org.elasticsearch.common.recycler.Recycler.V;
 import org.elasticsearch.common.xcontent.XContentBuilder;
 import org.elasticsearch.common.xcontent.XContentBuilderString;
 import org.elasticsearch.search.facet.Facet;
@@ -48,12 +54,16 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 
 		long key;
 		long count;
+		double binContent;
+		double sumOfSquares;
 
-		public DecimalEntry(long key, long count) {
+		public DecimalEntry(long key, long count, double binContent, double sumOfSquares) {
 			this.key = key;
+			this.binContent = binContent;
+			this.sumOfSquares = sumOfSquares;
 			this.count = count;
 		}
-
+		
 		@Override
 		public long getKey() {
 			return key;
@@ -69,6 +79,14 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 			return count;
 		}
 
+		public double getBinContent() {
+			return binContent;
+		}
+
+		public double getSumOfSquares() {
+			return sumOfSquares;
+		}
+		
 		@Override
 		public double getTotal() {
 			return Double.NaN;
@@ -112,6 +130,14 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 		this.entries = entries;
 	}
 
+	public InternalDecimalHistogramFacet(String name, double interval, double offset, HistogramFacet.ComparatorType comparatorType, List<DecimalEntry> entries) {
+		super(name);
+		this.interval = interval;
+		this.offset = offset;
+		this.comparatorType = comparatorType;
+		this.entries = (DecimalEntry[])entries.toArray();
+	}	
+	
 	@Override
 	public String getType() {
 		return TYPE;
@@ -131,25 +157,26 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 			return facet;
 		}
 
-		Recycler.V<LongLongOpenHashMap> counts = context.cacheRecycler().longLongMap(-1);
+		Recycler.V<LongObjectOpenHashMap<DecimalEntry>> counts = context.cacheRecycler().longObjectMap(-1);
 		for (Facet facet : facets) {
 			InternalDecimalHistogramFacet histoFacet = (InternalDecimalHistogramFacet) facet;
 			for (DecimalEntry entry : histoFacet.entries) {
-				counts.v().addTo(entry.getKey(), entry.getCount());
+				counts.v().put(entry.getKey(), entry);
 			}
 		}
 		final boolean[] states = counts.v().allocated;
 		final long[] keys = counts.v().keys;
-		final long[] values = counts.v().values;
+		final Object[] values = counts.v().values;
 		DecimalEntry[] entries = new DecimalEntry[counts.v().size()];
 		int entryIndex = 0;
 		for (int i = 0; i < states.length; ++i) {
 			if (states[i]) {
-				entries[entryIndex++] = new DecimalEntry(keys[i], values[i]);
+				DecimalEntry entry = (DecimalEntry)values[i];
+				entries[entryIndex++] = new DecimalEntry(keys[i], entry.getCount(),
+							entry.getBinContent(), entry.getSumOfSquares());
 			}
 		}
 		counts.release();
-
 		Arrays.sort(entries, comparatorType.comparator());
 
         return new InternalDecimalHistogramFacet(getName(), interval, offset, comparatorType, entries);
@@ -159,16 +186,20 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 
 		final XContentBuilderString _TYPE = new XContentBuilderString("_type");
 		final XContentBuilderString ENTRIES = new XContentBuilderString("entries");
+		final XContentBuilderString BINSIZE = new XContentBuilderString("binsize");
 		final XContentBuilderString KEY = new XContentBuilderString("key");
 		final XContentBuilderString COUNT = new XContentBuilderString("count");
+		final XContentBuilderString BINCONTENT = new XContentBuilderString("binContent");
+		final XContentBuilderString ERROR = new XContentBuilderString("error");
 	}
 
 	@Override
 	public XContentBuilder toXContent(XContentBuilder builder, Params params) throws IOException {
 		builder.startObject(getName());
 		builder.field(Fields._TYPE, DecimalHistogramFacet.TYPE);
+		builder.field(Fields.BINSIZE, interval);
 		builder.startArray(Fields.ENTRIES);
-		for (HistogramFacet.Entry entry : entries) {
+		for (InternalDecimalHistogramFacet.DecimalEntry entry : entries) {
 			toXContent(entry, builder);
 		}
 		builder.endArray();
@@ -176,10 +207,12 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 		return builder;
 	}
 
-	private void toXContent(HistogramFacet.Entry entry, XContentBuilder builder) throws IOException {
+	private void toXContent(InternalDecimalHistogramFacet.DecimalEntry entry, XContentBuilder builder) throws IOException {
 		builder.startObject();
 		builder.field(Fields.KEY, entry.getKey() * interval);
 		builder.field(Fields.COUNT, entry.getCount());
+		builder.field(Fields.BINCONTENT, entry.getBinContent());
+		builder.field(Fields.ERROR, Math.sqrt(entry.getSumOfSquares()));
 		builder.endObject();
 	}
 
@@ -193,10 +226,11 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 	public void readFrom(StreamInput in) throws IOException {
 		super.readFrom(in);
 		comparatorType = ComparatorType.fromId(in.readByte());
+		interval = in.readDouble();
 		int size = in.readVInt();
 		entries = new DecimalEntry[size];
 		for (int i = 0; i < size; i++) {
-			entries[i] = new DecimalEntry(in.readLong(), in.readVLong());
+			entries[i] = new DecimalEntry(in.readLong(), in.readVLong(), in.readDouble(), in.readDouble());
 		}
 	}
 
@@ -204,10 +238,13 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 	public void writeTo(StreamOutput out) throws IOException {
 		super.writeTo(out);
 		out.writeByte(comparatorType.id());
+		out.writeDouble(interval);
 		out.writeVInt(entries.length);
 		for (DecimalEntry entry : entries) {
 			out.writeLong(entry.key);
 			out.writeVLong(entry.count);
+			out.writeDouble(entry.binContent);
+			out.writeDouble(Math.sqrt(entry.sumOfSquares));
 		}
 	}
 }
