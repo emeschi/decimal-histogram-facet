@@ -14,10 +14,11 @@ import org.elasticsearch.search.facet.FacetExecutor;
 import org.elasticsearch.search.facet.FacetExecutor.Mode;
 import org.elasticsearch.search.facet.FacetParser;
 import org.elasticsearch.search.facet.FacetPhaseExecutionException;
-import org.elasticsearch.search.facet.histogram.ScriptHistogramFacetExecutor;
-import org.elasticsearch.search.facet.histogram.ValueScriptHistogramFacetExecutor;
+
 import org.elasticsearch.search.facet.histogram.HistogramFacet.ComparatorType;
 import org.elasticsearch.search.internal.SearchContext;
+
+import com.zenobase.search.facet.decimalhistogram.DecimalHistogramFacet;
 
 public class DecimalHistogramFacetParser extends AbstractComponent implements FacetParser {
 
@@ -57,6 +58,9 @@ public class DecimalHistogramFacetParser extends AbstractComponent implements Fa
         
 		double interval = 0.0;
 		double offset = 0.0;
+		int nbin = 0;
+		double xmin = 1.;
+		double xmax = -1.;
 		ComparatorType comparatorType = ComparatorType.KEY;
  
 		
@@ -74,6 +78,12 @@ public class DecimalHistogramFacetParser extends AbstractComponent implements Fa
 					field = parser.text();
 				} else if ("interval".equals(currentName)) {
 					interval = parser.doubleValue();
+				} else if ("nbin".equals(currentName)) {
+					nbin = parser.intValue();
+				} else if ("xmin".equals(currentName)) {
+					xmin = parser.doubleValue();
+				} else if ("xmax".equals(currentName)) {
+					xmax = parser.doubleValue();
 				} else if ("key_field".equals(currentName) || "keyField".equals(currentName)) {
                     field = parser.text();
                 } else if ("value_field".equals(currentName) || "valueField".equals(currentName)) {
@@ -93,12 +103,15 @@ public class DecimalHistogramFacetParser extends AbstractComponent implements Fa
 		}
 
 		if (keyScript != null && valueScript != null) {
-            return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, valueScript, params, interval, offset, comparatorType, context);
-        }
+			if(nbin==0)
+				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, valueScript, params, interval, offset, comparatorType, context);
+			else
+				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, valueScript, params, nbin, xmin, xmax, comparatorType, context);
+		}
         if (field == null) {
 			throw new FacetPhaseExecutionException(facetName, "[field] is required for decimal histogram facet");
 		}
-		if (interval <= 0.0) {
+		if (interval <= 0.0 && nbin == 0) {
 			throw new FacetPhaseExecutionException(facetName, "[interval] must be greater than 0.0");
 		}
 		FieldMapper<AtomicNumericFieldData> fieldMapper = context.smartNameFieldMapper(field);
@@ -106,6 +119,9 @@ public class DecimalHistogramFacetParser extends AbstractComponent implements Fa
             throw new FacetPhaseExecutionException(facetName, "failed to find mapping for [" + field + "]");
         }
         IndexNumericFieldData<AtomicNumericFieldData> indexFieldData = context.fieldData().getForField(fieldMapper);
-		return new DecimalHistogramFacetExecutor(indexFieldData, interval, offset, comparatorType, context);
+        if(nbin==0)
+        	return new DecimalHistogramFacetExecutor(indexFieldData, interval, offset, comparatorType, context);
+        else
+        	return new DecimalHistogramFacetExecutor(indexFieldData, nbin, xmin, xmax, comparatorType, context);
 	}
 }

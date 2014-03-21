@@ -3,7 +3,6 @@ package com.zenobase.search.facet.decimalhistogram;
 import java.io.IOException;
 import java.util.Map;
 
-import com.carrotsearch.hppc.LongObjectOpenHashMap;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.recycler.Recycler;
@@ -13,6 +12,8 @@ import org.elasticsearch.search.facet.InternalFacet;
 import org.elasticsearch.search.facet.histogram.HistogramFacet;
 import org.elasticsearch.search.facet.histogram.HistogramFacet.ComparatorType;
 import org.elasticsearch.search.internal.SearchContext;
+import org.elasticsearch.common.hppc.LongObjectOpenHashMap;
+ 
 
 public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
 
@@ -20,6 +21,9 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
     final SearchScript valueScript;
     final double interval;
     final double offset;
+    final int nbins;
+    final double xmin;
+    final double xmax;
     
     final Recycler.V<LongObjectOpenHashMap<InternalDecimalHistogramFacet.DecimalEntry>> entries;
     
@@ -35,9 +39,26 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
 	       this.entries = context.cacheRecycler().longObjectMap(-1);
 	       
 	       this.comparatorType = comparatorType;
-	       
+	       this.nbins=0;
+	       this.xmin=1.;
+	       this.xmax=-1.;
 
 
+	}
+	public ScriptDecimalHistogramFacetExecutor(String scriptLang,
+			String keyScript, String valueScript, Map<String, Object> params,
+			int nbin, double xmin, double xmax, ComparatorType comparatorType,
+			SearchContext context) {
+	       this.keyScript = context.scriptService().search(context.lookup(), scriptLang, keyScript, params);
+	       this.valueScript = context.scriptService().search(context.lookup(), scriptLang, valueScript, params);
+	       this.offset = 0.;
+	       this.entries = context.cacheRecycler().longObjectMap(-1);
+	       this.nbins=nbin;
+	       this.xmin=xmin;
+	       this.xmax=xmax;
+	       this.interval=(xmax-xmin)/nbin;
+	       this.comparatorType = comparatorType;
+	
 	}
 	@Override
 	public FacetExecutor.Collector collector() {
@@ -61,7 +82,10 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
         }
 
         entries.release();
-		return new InternalDecimalHistogramFacet(facetName, interval, offset, comparatorType, entries1);
+        if(nbins==0)
+        	return new InternalDecimalHistogramFacet(facetName, interval, offset, comparatorType, entries1);
+        else
+        	return new InternalDecimalHistogramFacet(facetName, nbins, xmin, xmax, comparatorType, entries1);
 	}
 
 	private class Collector extends FacetExecutor.Collector {
@@ -89,9 +113,15 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
 		public void collect(int doc) throws IOException {
             keyScript.setNextDocId(doc);
             valueScript.setNextDocId(doc);
-
-            long bucket = (long) Math.floor(((keyScript.runAsDouble() + offset) / interval));             
+            
             double value = valueScript.runAsDouble();
+            double key = keyScript.runAsDouble();
+            long bucket = (nbins==0) ? (long) Math.floor(((key + offset) / interval)) :
+            	(long) Math.floor(((key - xmin) / interval));             
+			if(nbins!=0){
+				if(key>xmax) bucket = Integer.MAX_VALUE;
+				else if(key<xmin) bucket = Integer.MIN_VALUE;;
+			}
 
             InternalDecimalHistogramFacet.DecimalEntry entry = entries.get(bucket);
             if (entry == null) {

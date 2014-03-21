@@ -19,6 +19,7 @@ public class DecimalHistogramFacetBuilder extends FacetBuilder {
 		this.interval = interval;
 		this.offset = offset;
 		this.comparatorType = comparatorType;
+		System.out.println("builder constructor");
 	}
 
 	@Override
@@ -34,6 +35,7 @@ public class DecimalHistogramFacetBuilder extends FacetBuilder {
 		builder.endObject();
 		addFilterFacetAndGlobal(builder, params);
 		builder.endObject();
+		System.out.println("builder toXContent");
 		return builder;
 	}
 }
