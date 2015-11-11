@@ -6,7 +6,7 @@ This plugin provides a facet for [elasticsearch](http://www.elasticsearch.org/) 
 To install the plugin, run:
 
 ```
-bin/plugin --url https://github.com/zenobase/decimal-histogram-facet/releases/download/0.0.2/decimal-histogram-facet-0.0.2.jar --install geocluster-facet
+bin/plugin --url https://github.com/zenobase/decimal-histogram-facet/releases/download/0.0.4/decimal-histogram-facet-0.0.4.jar --install decimal-histogram-facet
 ```
 
 
@@ -22,7 +22,22 @@ Versions
   </thead>
   <tbody>
     <tr>
-      <td>0.0.2 -> master</td>
+      <td>
+        0.0.5 -> master
+        <a href="https://travis-ci.org/zenobase/decimal-histogram-facet"><img title="Build Status" src="https://travis-ci.org/zenobase/decimal-histogram-facet.png?branch=master"/></a>
+      </td>
+      <td>1.4.x -> 1.7.x</td>
+    </tr>
+    <tr>
+      <td>0.0.4</td>
+      <td>1.2.x, 1.3.x</td>
+    </tr>
+    <tr>
+      <td>0.0.3</td>
+      <td>1.0.x, 1.1.x</td>
+    </tr>
+    <tr>
+      <td>0.0.2</td>
       <td>0.90.6, 0.90.7</td>
     </tr>
     <tr>
@@ -106,7 +121,7 @@ License
 ```
 This software is licensed under the Apache 2 license, quoted below.
 
-Copyright 2012-2013 Zenobase LLC
+Copyright 2012-2014 Zenobase LLC
 
 Licensed under the Apache License, Version 2.0 (the "License"); you may not
 use this file except in compliance with the License. You may obtain a copy of

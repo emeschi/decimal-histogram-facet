@@ -4,9 +4,8 @@ import java.io.IOException;
 
 import org.apache.lucene.index.AtomicReaderContext;
 import org.elasticsearch.common.recycler.Recycler;
-import org.elasticsearch.index.fielddata.AtomicNumericFieldData;
-import org.elasticsearch.index.fielddata.DoubleValues;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
+import org.elasticsearch.index.fielddata.SortedNumericDoubleValues;
 import org.elasticsearch.search.facet.DoubleFacetAggregatorBase;
 import org.elasticsearch.search.facet.FacetExecutor;
 import org.elasticsearch.search.facet.InternalFacet;
@@ -19,7 +18,7 @@ import com.zenobase.search.facet.decimalhistogram.InternalDecimalHistogramFacet.
 
 public class DecimalHistogramFacetExecutor extends FacetExecutor {
 
-	private final IndexNumericFieldData<AtomicNumericFieldData> indexFieldData;
+	private final IndexNumericFieldData indexFieldData;
 	private final ComparatorType comparatorType;
 	private final double interval;
 	private final double offset;
@@ -29,7 +28,8 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 
 	final Recycler.V<LongObjectOpenHashMap<InternalDecimalHistogramFacet.DecimalEntry>> counts;
 
-	public DecimalHistogramFacetExecutor(IndexNumericFieldData<AtomicNumericFieldData> indexFieldData, int nbin, double xmin, double xmax, ComparatorType comparatorType, SearchContext context) {
+
+	public DecimalHistogramFacetExecutor(IndexNumericFieldData indexFieldData, int nbin, double xmin, double xmax, ComparatorType comparatorType, SearchContext context) {
 		this.indexFieldData = indexFieldData;
 		this.nbins=nbin; //2 more will be added for underflow and overflow
 		this.xmax = xmax;
@@ -41,7 +41,7 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 		this.counts = context.cacheRecycler().longObjectMap(-1);
 	}
 	
-	public DecimalHistogramFacetExecutor(IndexNumericFieldData<AtomicNumericFieldData> indexFieldData, double interval, double offset, ComparatorType comparatorType, SearchContext context) {
+	public DecimalHistogramFacetExecutor(IndexNumericFieldData indexFieldData, double interval, double offset, ComparatorType comparatorType, SearchContext context) {
 		this.indexFieldData = indexFieldData;
 		this.nbins = 0;
 		this.xmin=1.;
@@ -82,7 +82,7 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 	private class Collector extends FacetExecutor.Collector {
 
 		private final HistogramProc histoProc;
-		private DoubleValues values;
+		private SortedNumericDoubleValues values;
 
 		public Collector() {
 			if(nbins==0)
