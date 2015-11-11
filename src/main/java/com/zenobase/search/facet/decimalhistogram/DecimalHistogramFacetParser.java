@@ -10,6 +10,7 @@ import org.elasticsearch.common.xcontent.XContentParser;
 import org.elasticsearch.index.fielddata.AtomicNumericFieldData;
 import org.elasticsearch.index.fielddata.IndexNumericFieldData;
 import org.elasticsearch.index.mapper.FieldMapper;
+import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.search.facet.FacetExecutor;
 import org.elasticsearch.search.facet.FacetExecutor.Mode;
 import org.elasticsearch.search.facet.FacetParser;
@@ -104,9 +105,9 @@ public class DecimalHistogramFacetParser extends AbstractComponent implements Fa
 
 		if (keyScript != null && valueScript != null) {
 			if(nbin==0)
-				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, valueScript, params, interval, offset, comparatorType, context);
+				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, ScriptService.ScriptType.INLINE, valueScript, ScriptService.ScriptType.INLINE, params, interval, offset, comparatorType, context);
 			else
-				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, valueScript, params, nbin, xmin, xmax, comparatorType, context);
+				return new ScriptDecimalHistogramFacetExecutor(scriptLang, keyScript, ScriptService.ScriptType.INLINE, valueScript, ScriptService.ScriptType.INLINE, params, nbin, xmin, xmax, comparatorType, context);
 		}
         if (field == null) {
 			throw new FacetPhaseExecutionException(facetName, "[field] is required for decimal histogram facet");

@@ -6,6 +6,8 @@ import java.util.Map;
 import org.apache.lucene.index.AtomicReaderContext;
 import org.apache.lucene.search.Scorer;
 import org.elasticsearch.common.recycler.Recycler;
+import org.elasticsearch.script.ScriptContext;
+import org.elasticsearch.script.ScriptService;
 import org.elasticsearch.script.SearchScript;
 import org.elasticsearch.search.facet.FacetExecutor;
 import org.elasticsearch.search.facet.InternalFacet;
@@ -29,11 +31,11 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
     
     private final HistogramFacet.ComparatorType comparatorType;
 
-	public ScriptDecimalHistogramFacetExecutor(String scriptLang,
-			String keyScript, String valueScript, Map<String, Object> params, double interval,
-			double offset, ComparatorType comparatorType, SearchContext context) {
-	       this.keyScript = context.scriptService().search(context.lookup(), scriptLang, keyScript, params);
-	       this.valueScript = context.scriptService().search(context.lookup(), scriptLang, valueScript, params);
+	public ScriptDecimalHistogramFacetExecutor(String scriptLang, String keyScript, ScriptService.ScriptType keyScriptType, String valueScript, ScriptService.ScriptType valueScriptType, Map<String, Object> params, double interval, double offset, ComparatorType comparatorType, SearchContext context) {
+
+	       this.keyScript = context.scriptService().search(context.lookup(), scriptLang, keyScript, keyScriptType, ScriptContext.Standard.AGGS, params);
+	       this.valueScript = context.scriptService().search(context.lookup(), scriptLang, valueScript, valueScriptType, ScriptContext.Standard.AGGS, params);
+
 	       this.interval = interval > 0. ? interval : 0.;
 	       this.offset = offset;
 	       this.entries = context.cacheRecycler().longObjectMap(-1);
@@ -45,18 +47,19 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
 
 
 	}
-	public ScriptDecimalHistogramFacetExecutor(String scriptLang,
-			String keyScript, String valueScript, Map<String, Object> params,
-			int nbin, double xmin, double xmax, ComparatorType comparatorType,
-			SearchContext context) {
-	       this.keyScript = context.scriptService().search(context.lookup(), scriptLang, keyScript, params);
-	       this.valueScript = context.scriptService().search(context.lookup(), scriptLang, valueScript, params);
-	       this.offset = 0.;
-	       this.entries = context.cacheRecycler().longObjectMap(-1);
-	       this.nbins=nbin;
-	       this.xmin=xmin;
-	       this.xmax=xmax;
+
+	public ScriptDecimalHistogramFacetExecutor(String scriptLang, String keyScript, ScriptService.ScriptType keyScriptType, String valueScript, ScriptService.ScriptType valueScriptType, Map<String, Object> params, int nbin, double xmin, double xmax, ComparatorType comparatorType, SearchContext context) {
+
+		   this.keyScript = context.scriptService().search(context.lookup(), scriptLang, keyScript, keyScriptType, ScriptContext.Standard.AGGS, params);
+		   this.valueScript = context.scriptService().search(context.lookup(), scriptLang, valueScript, valueScriptType, ScriptContext.Standard.AGGS, params);
+
+		   this.offset = 0.;
+		   this.entries = context.cacheRecycler().longObjectMap(-1);
+		   this.nbins=nbin;
+		   this.xmin=xmin;
+		   this.xmax=xmax;
 	       this.interval=(xmax-xmin)/nbin;
+
 	       this.comparatorType = comparatorType;
 	
 	}
@@ -81,7 +84,7 @@ public class ScriptDecimalHistogramFacetExecutor extends FacetExecutor {
 //            	entries1[i]= new InternalDecimalHistogramFacet.DecimalEntry(i,0.0);
         }
 
-        entries.release();
+        entries.close();
         if(nbins==0)
         	return new InternalDecimalHistogramFacet(facetName, interval, offset, comparatorType, entries1);
         else

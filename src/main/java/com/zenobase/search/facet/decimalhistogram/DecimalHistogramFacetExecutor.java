@@ -71,7 +71,7 @@ public class DecimalHistogramFacetExecutor extends FacetExecutor {
 						value.getBinContent(), value.getSumOfSquares());
 			}
 		}
-		counts.release();
+		counts.close();
 		if(nbins==0)
 			return new InternalDecimalHistogramFacet(facetName, interval, offset, comparatorType, entries);
 		else

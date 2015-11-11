@@ -307,7 +307,7 @@ public class InternalDecimalHistogramFacet extends InternalFacet implements Deci
 		}
 		this.rms = Math.sqrt(this.rms);
 		this.rms/=this.integral;
-		counts.release();
+		counts.close();
 		Arrays.sort(localentries, comparatorType.comparator());
 		if(nbins==0)
 			return new InternalDecimalHistogramFacet(getName(), interval, offset, comparatorType, localentries);
